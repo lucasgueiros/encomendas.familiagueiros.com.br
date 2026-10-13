@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Consulta de encomendas</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f4f4f5; color: #18181b; margin: 0; }
+    main { max-width: 28rem; margin: 4rem auto; padding: 0 1rem; }
+    .card { background: #fff; border-radius: .75rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+    h1 { font-size: 1.4rem; margin-top: 0; }
+    label { display: block; margin-bottom: .4rem; font-weight: 600; }
+    input { width: 100%; box-sizing: border-box; padding: .6rem; font-size: 1rem; border: 1px solid #d4d4d8; border-radius: .4rem; }
+    button { margin-top: 1rem; width: 100%; padding: .7rem; font-size: 1rem; border: 0; border-radius: .4rem; background: #2563eb; color: #fff; cursor: pointer; }
+    .resultado { margin-top: 1.25rem; padding: 1rem; border-radius: .4rem; }
+    .ok { background: #dcfce7; }
+    .erro { background: #fee2e2; }
+    .telefone { font-size: 1.5rem; font-weight: 700; }
+    .errorlist { color: #b91c1c; padding-left: 1rem; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>Consulta de encomendas</h1>
+    <form method="post">
+      {% csrf_token %}
+      {{ form.numero.label_tag }}
+      {{ form.numero }}
+      {{ form.numero.errors }}
+      <button type="submit">Consultar</button>
+    </form>
+
+    {% if bloqueado %}
+      <div class="resultado erro">Muitas tentativas. Tente novamente mais tarde.</div>
+    {% elif consultado %}
+      {% if encomenda %}
+        <div class="resultado ok">
+          Encomenda <strong>{{ encomenda.numero }}</strong><br>
+          Telefone: <span class="telefone">{{ encomenda.telefone }}</span>
+        </div>
+      {% else %}
+        <div class="resultado erro">Nenhuma encomenda encontrada com esse número.</div>
+      {% endif %}
+    {% endif %}
+  </div>
+</main>
+</body>
+</html>
