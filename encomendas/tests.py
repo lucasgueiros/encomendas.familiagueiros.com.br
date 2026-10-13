@@ -24,7 +24,9 @@ class ConsultaTests(TestCase):
         self.assertContains(resp, 'name="numero"')
 
     def test_match_exato_mostra_telefone(self):
-        self.assertContains(self.consultar('BR123'), '(81) 99999-0000')
+        resp = self.consultar('BR123')
+        self.assertContains(resp, '(81) 99999-0000')
+        self.assertContains(resp, 'href="https://wa.me/5581999990000"')
 
     def test_sem_match_parcial_ou_case_insensitive(self):
         for numero in ['BR12', 'br123', 'BR1234']:

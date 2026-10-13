@@ -17,6 +17,8 @@
     .ok { background: #dcfce7; }
     .erro { background: #fee2e2; }
     .telefone { font-size: 1.5rem; font-weight: 700; }
+    .telefone a { color: #15803d; }
+    .ajuda { margin: 0 0 .5rem; font-size: .9rem; color: #52525b; }
     .errorlist { color: #b91c1c; padding-left: 1rem; }
   </style>
 </head>
@@ -27,6 +29,7 @@
     <form method="post">
       {% csrf_token %}
       {{ form.numero.label_tag }}
+      <p class="ajuda">{{ form.numero.help_text }}</p>
       {{ form.numero }}
       {{ form.numero.errors }}
       <button type="submit">Consultar</button>
@@ -38,7 +41,7 @@
       {% if encomenda %}
         <div class="resultado ok">
           Encomenda <strong>{{ encomenda.numero }}</strong><br>
-          Telefone: <span class="telefone">{{ encomenda.telefone }}</span>
+          Telefone: <span class="telefone"><a href="{{ encomenda.whatsapp_url }}" target="_blank" rel="noopener">{{ encomenda.telefone }}</a></span>
         </div>
       {% else %}
         <div class="resultado erro">Nenhuma encomenda encontrada com esse número.</div>

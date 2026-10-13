@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.db import models
 
@@ -20,6 +22,13 @@ class Encomenda(models.Model):
 
     def __str__(self):
         return self.numero
+
+    @property
+    def whatsapp_url(self):
+        digitos = re.sub(r'\D', '', self.telefone)
+        if not digitos.startswith('55') or len(digitos) <= 11:
+            digitos = '55' + digitos
+        return f'https://wa.me/{digitos}'
 
     def save(self, *args, **kwargs):
         self.numero = self.numero.strip()
