@@ -1,34 +1,25 @@
 #!/usr/bin/env bash
-# Executado NA VM, como root, por deploy/publicar.sh.
-# Argumentos: <dir com o código enviado> <domínio> <porta do gunicorn> [email certbot]
+# Instala a aplicação nesta VM (nginx já existente, sem Docker), com HTTPS.
+# Pode ser rodado de novo sem problemas (não apaga banco nem SECRET_KEY).
 #
-# Layout na VM:
-#   /opt/encomendas/app       código
-#   /opt/encomendas/venv      virtualenv
-#   /opt/encomendas/static    arquivos estáticos (servidos pelo nginx)
-#   /var/lib/encomendas       banco SQLite e cache (preservados entre deploys)
-#   /etc/encomendas/encomendas.env   variáveis de ambiente (SECRET_KEY etc.)
+# Uso (na VM, dentro do clone do git):
+#   sudo ./deploy/instalar.sh
+#
+# Variáveis opcionais:
+#   DOMINIO        (padrão: encomendas.familiagueiros.com.br)
+#   APP_PORTA      porta local do gunicorn (padrão: 8010)
+#   CERTBOT_EMAIL  e-mail para avisos do Let's Encrypt
+#   ex.: sudo CERTBOT_EMAIL=voce@exemplo.com ./deploy/instalar.sh
+#
+# Para atualizar depois: sudo ./deploy/atualizar.sh
 set -euo pipefail
+source "$(dirname "$0")/comum.sh"
 
-ORIGEM="$1"
-DOMINIO="$2"
-PORTA="$3"
-CERTBOT_EMAIL="${4:-}"
-
-APP=encomendas
-USUARIO=encomendas
-BASE=/opt/$APP
-DADOS=/var/lib/$APP
-ENV_DIR=/etc/$APP
-ENV_FILE=$ENV_DIR/$APP.env
+DOMINIO="${DOMINIO:-encomendas.familiagueiros.com.br}"
+PORTA="${APP_PORTA:-8010}"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 WEBROOT=/var/www/certbot
-SERVICO=$APP.service
 
-log() { echo -e "\n\033[1;32m==> $*\033[0m"; }
-erro() { echo -e "\033[1;31mERRO: $*\033[0m" >&2; exit 1; }
-
-[ "$(id -u)" -eq 0 ] || erro "rode como root (sudo)."
-[ -f "$ORIGEM/manage.py" ] || erro "código não encontrado em $ORIGEM."
 command -v nginx >/dev/null || erro "nginx não encontrado."
 
 # ---------------------------------------------------------------- pacotes
@@ -36,9 +27,9 @@ log "Instalando dependências do sistema"
 if command -v apt-get >/dev/null; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq python3 python3-venv certbot rsync curl >/dev/null
+    apt-get install -y -qq python3 python3-venv certbot rsync curl git >/dev/null
 else
-    for c in python3 certbot rsync; do
+    for c in python3 certbot rsync curl git; do
         command -v $c >/dev/null || erro "instale '$c' manualmente (sistema sem apt)."
     done
 fi
@@ -63,14 +54,8 @@ install -d -o $USUARIO -g $USUARIO -m 750 $DADOS $DADOS/cache
 install -d -o root -g $USUARIO -m 750 $ENV_DIR
 install -d -m 755 $WEBROOT
 
-# ---------------------------------------------------------------- código
-log "Copiando código para $BASE/app"
-rsync -a --delete --exclude=deploy/ "$ORIGEM"/ $BASE/app/
-chown -R root:root $BASE/app
-chmod -R u=rwX,go=rX $BASE/app
-
 # ---------------------------------------------------------------- virtualenv
-log "Atualizando virtualenv"
+log "Criando virtualenv"
 if [ ! -x $BASE/venv/bin/python ] || ! $BASE/venv/bin/python -c 'import sys; sys.exit(sys.version_info < (3, 12))'; then
     rm -rf $BASE/venv
     if ! "$PYTHON" -m venv $BASE/venv; then
@@ -78,8 +63,6 @@ if [ ! -x $BASE/venv/bin/python ] || ! $BASE/venv/bin/python -c 'import sys; sys
         "$PYTHON" -m venv $BASE/venv
     fi
 fi
-$BASE/venv/bin/pip install -q --upgrade pip
-$BASE/venv/bin/pip install -q -r $BASE/app/requirements.txt
 
 # ---------------------------------------------------------------- variáveis de ambiente
 if [ ! -f $ENV_FILE ]; then
@@ -104,17 +87,12 @@ chmod 640 $ENV_FILE
 
 # Atalho para rodar manage.py como o usuário da aplicação:
 #   sudo encomendas-manage createsuperuser
-cat > /usr/local/bin/$APP-manage <<EOF
+cat > $MANAGE <<EOF
 #!/usr/bin/env bash
 cd $BASE/app
 exec runuser -u $USUARIO -- bash -c 'set -a; . $ENV_FILE; set +a; exec $BASE/venv/bin/python $BASE/app/manage.py "\$@"' _ "\$@"
 EOF
-chmod 755 /usr/local/bin/$APP-manage
-
-log "Migrações e arquivos estáticos"
-/usr/local/bin/$APP-manage migrate --noinput
-/usr/local/bin/$APP-manage collectstatic --noinput --clear -v 0
-/usr/local/bin/$APP-manage check --deploy --fail-level ERROR
+chmod 755 $MANAGE
 
 # ---------------------------------------------------------------- gunicorn (systemd)
 log "Configurando serviço systemd ($SERVICO na porta $PORTA)"
@@ -145,7 +123,9 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 systemctl enable --quiet $SERVICO
-systemctl restart $SERVICO
+
+# Copia o código, instala dependências, migra e (re)inicia o serviço.
+"$REPO/deploy/atualizar.sh" --sem-pull
 
 # ---------------------------------------------------------------- nginx
 if [ -d /etc/nginx/sites-available ]; then
@@ -257,12 +237,8 @@ log "Ativando HTTPS no nginx"
 aplicar_nginx https
 
 # ---------------------------------------------------------------- verificação
-sleep 2
-if ! systemctl is-active --quiet $SERVICO; then
-    journalctl -u $SERVICO -n 30 --no-pager
-    erro "serviço $SERVICO não está rodando."
-fi
 CODIGO=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$DOMINIO:443:127.0.0.1" "https://$DOMINIO/" || true)
 log "Publicado: https://$DOMINIO/ (resposta local: HTTP $CODIGO)"
 echo "Logs:          sudo journalctl -u $SERVICO -f"
 echo "Criar admin:   sudo $APP-manage createsuperuser"
+echo "Atualizar:     sudo ./deploy/atualizar.sh"
