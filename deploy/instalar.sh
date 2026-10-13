@@ -35,14 +35,27 @@ else
 fi
 
 # Django 6.x exige Python >= 3.12
-PYTHON=""
-for c in python3.14 python3.13 python3.12 python3; do
-    if command -v $c >/dev/null && $c -c 'import sys; sys.exit(sys.version_info < (3, 12))'; then
-        PYTHON="$(command -v $c)"
-        break
+achar_python() {
+    PYTHON=""
+    for c in python3.14 python3.13 python3.12 python3; do
+        if command -v $c >/dev/null && $c -c 'import sys; sys.exit(sys.version_info < (3, 12))'; then
+            PYTHON="$(command -v $c)"
+            return 0
+        fi
+    done
+    return 1
+}
+if ! achar_python; then
+    # Ubuntu antigo (ex.: 22.04 vem com 3.10): instala o 3.12 do PPA deadsnakes.
+    if command -v apt-get >/dev/null && grep -qi '^ID=ubuntu' /etc/os-release; then
+        log "Python >= 3.12 ausente; instalando python3.12 via PPA deadsnakes"
+        apt-get install -y -qq software-properties-common >/dev/null
+        add-apt-repository -y ppa:deadsnakes/ppa
+        apt-get update -qq
+        apt-get install -y -qq python3.12 python3.12-venv >/dev/null
     fi
-done
-[ -n "$PYTHON" ] || erro "Python >= 3.12 não encontrado (Django 6 exige). Instale um (ex.: python3.12) e rode de novo."
+    achar_python || erro "Python >= 3.12 não encontrado (Django 6 exige). Instale um (ex.: python3.12) e rode de novo."
+fi
 echo "Usando $PYTHON ($($PYTHON --version))"
 
 # ---------------------------------------------------------------- usuário e diretórios
