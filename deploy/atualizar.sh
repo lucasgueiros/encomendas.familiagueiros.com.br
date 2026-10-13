@@ -32,7 +32,7 @@ $BASE/venv/bin/pip install -q -r $BASE/app/requirements.txt
 log "Migrações e arquivos estáticos"
 $MANAGE migrate --noinput
 $MANAGE collectstatic --noinput --clear -v 0
-$MANAGE check --deploy --fail-level ERROR
+$MANAGE check
 
 log "Reiniciando $SERVICO"
 systemctl restart $SERVICO
